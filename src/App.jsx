@@ -28,6 +28,14 @@ const formatVenezuelaDate = (isoTimestamp) => {
   return venezuelaDate.toLocaleDateString('es-VE', { timeZone: 'UTC' });
 };
 
+// Utility to format as Currency based on mode
+const formatByCurrency = (amount, mode) => {
+  if (mode === 'Bs') {
+    return new Intl.NumberFormat('es-VE', { style: 'currency', currency: 'VES' }).format(amount);
+  }
+  return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(amount);
+};
+
 // Helper: Get YYYY-MM-DD in Venezuela Time (UTC-4)
 // Used for filtering and default date inputs
 const getVenezuelaDateISO = (isoTimestamp) => {
@@ -117,6 +125,7 @@ function App() {
 
   const [form, setForm] = useState({ agent: '', amount: '', reference: '', date: getVenezuelaDateISO() });
   const [exchangeRates, setExchangeRates] = useState({ bcv: 0, paralelo: 0, loading: true });
+  const [currencyMode, setCurrencyMode] = useState('Bs'); // 'Bs', 'BCV', 'Paralelo'
   const [editingId, setEditingId] = useState(null);
   const [error, setError] = useState('');
   const [successMsg, setSuccessMsg] = useState('');
@@ -169,6 +178,20 @@ function App() {
 
     return { total, profit, toUSDT, perAgent };
   }, [paymentsByDate]);
+
+  // Helper to convert value based on currency mode
+  const convertedStats = useMemo(() => {
+    const convert = (val) => {
+      if (currencyMode === 'BCV' && exchangeRates.bcv > 0) return val / exchangeRates.bcv;
+      if (currencyMode === 'Paralelo' && exchangeRates.paralelo > 0) return val / exchangeRates.paralelo;
+      return val;
+    };
+    return {
+      total: convert(stats.total),
+      profit: convert(stats.profit),
+      toUSDT: convert(stats.toUSDT)
+    };
+  }, [stats, currencyMode, exchangeRates]);
 
   // 3. History View Filter
   const historyFilteredList = useMemo(() => {
@@ -528,26 +551,52 @@ function App() {
 
       {/* Main Stats Cards */}
       {!showHistory && !showStats && (
-        <div className="grid grid-cols-2 gap-3 mb-6">
-          <div className="bg-app-card p-3 rounded-2xl border border-slate-700 col-span-2 flex justify-between items-center bg-gradient-to-br from-slate-800 to-slate-900">
-            <div>
-              <span className="text-xs font-medium text-app-muted uppercase tracking-wider block mb-1">Total Recaudado</span>
-              <span className="text-3xl font-bold text-white tracking-tight">{formatMoney(stats.total)}</span>
-            </div>
-            <div className="h-10 w-10 bg-emerald-500/10 rounded-full flex items-center justify-center text-emerald-500">
-              <Wallet size={20} />
-            </div>
+        <div className="mb-6">
+          {/* Currency Toggle */}
+          <div className="flex bg-slate-800/50 p-1 rounded-xl border border-slate-700/50 mb-3">
+            {['Bs', 'BCV', 'Paralelo'].map((m) => (
+              <button
+                key={m}
+                onClick={() => setCurrencyMode(m)}
+                className={`flex-1 py-1.5 text-[10px] font-bold rounded-lg transition-all ${currencyMode === m
+                    ? 'bg-emerald-500 text-white shadow-lg'
+                    : 'text-slate-400 hover:text-slate-200'
+                  }`}
+              >
+                {m}
+              </button>
+            ))}
           </div>
 
-          <div className="bg-app-card p-3 rounded-2xl border border-slate-700">
-            <span className="text-[10px] font-medium text-app-muted uppercase tracking-wider block mb-1">Honorarios (3%)</span>
-            <span className="text-lg font-bold text-emerald-400">{formatMoney(stats.profit)}</span>
-          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div className="bg-app-card p-3 rounded-2xl border border-slate-700 col-span-2 flex justify-between items-center bg-gradient-to-br from-slate-800 to-slate-900">
+              <div>
+                <span className="text-xs font-medium text-app-muted uppercase tracking-wider block mb-1">
+                  Total Recaudado ({currencyMode})
+                </span>
+                <span className="text-3xl font-bold text-white tracking-tight">
+                  {formatByCurrency(convertedStats.total, currencyMode)}
+                </span>
+              </div>
+              <div className="h-10 w-10 bg-emerald-500/10 rounded-full flex items-center justify-center text-emerald-500">
+                <Wallet size={20} />
+              </div>
+            </div>
 
-          <div className="bg-app-card p-3 rounded-2xl border border-slate-700 relative overflow-hidden">
-            <div className="absolute inset-0 bg-blue-500/5"></div>
-            <span className="text-[10px] font-medium text-blue-300 uppercase tracking-wider block mb-1 relative z-10">Pasar a USDT</span>
-            <span className="text-lg font-bold text-blue-400 relative z-10">{formatMoney(stats.toUSDT)}</span>
+            <div className="bg-app-card p-3 rounded-2xl border border-slate-700">
+              <span className="text-[10px] font-medium text-app-muted uppercase tracking-wider block mb-1">Honorarios (3%)</span>
+              <span className="text-lg font-bold text-emerald-400">
+                {formatByCurrency(convertedStats.profit, currencyMode)}
+              </span>
+            </div>
+
+            <div className="bg-app-card p-3 rounded-2xl border border-slate-700 relative overflow-hidden">
+              <div className="absolute inset-0 bg-blue-500/5"></div>
+              <span className="text-[10px] font-medium text-blue-300 uppercase tracking-wider block mb-1 relative z-10">Pasar a USDT</span>
+              <span className="text-lg font-bold text-blue-400 relative z-10">
+                {formatByCurrency(convertedStats.toUSDT, currencyMode)}
+              </span>
+            </div>
           </div>
         </div>
       )}
