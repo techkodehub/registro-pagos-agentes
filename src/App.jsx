@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { PlusCircle, Trash2, Wallet, Users, History, Calendar, Filter, Cloud, CloudOff, Pencil, FileText, BarChart3 } from 'lucide-react';
+import { PlusCircle, Trash2, Wallet, Users, History, Calendar, Filter, Cloud, CloudOff, Pencil, FileText, BarChart3, MessageSquare } from 'lucide-react';
 import { db } from './firebase';
 import { collection, addDoc, onSnapshot, deleteDoc, doc, query, orderBy, updateDoc } from 'firebase/firestore';
 import jsPDF from 'jspdf';
@@ -476,6 +476,28 @@ function App() {
     doc.save(`Reporte_Pagos_${globalFilterDate}.pdf`);
   };
 
+  const copySummaryToClipboard = () => {
+    const text = `📊 *RESUMEN DE PAGOS - ${globalFilterDate}*
+----------------------------------
+💰 *Total Recaudado (Bs):* ${formatByCurrency(stats.total, 'Bs')}
+💎 *Honorarios (3%):* ${formatByCurrency(stats.profit, 'Bs')}
+🚀 *Pasar a USDT:* ${formatByCurrency(stats.toUSDT, 'Bs')}
+
+📈 *TASAS DEL DÍA*
+🏦 *BCV:* ${exchangeRates.bcv.toFixed(2)} Bs
+📉 *Paralelo:* ${exchangeRates.paralelo.toFixed(2)} Bs
+----------------------------------
+_Generado desde Control de Pagos PWA_`;
+
+    navigator.clipboard.writeText(text).then(() => {
+      setSuccessMsg("✅ Resumen copiado para WhatsApp");
+      setTimeout(() => setSuccessMsg(""), 3000);
+    }).catch(err => {
+      console.error('Error al copiar:', err);
+      setError('No se pudo copiar el resumen.');
+    });
+  };
+
   return (
     <div className="min-h-screen bg-app-bg text-app-text p-4 pb-48 font-sans max-w-md mx-auto">
 
@@ -917,10 +939,17 @@ function App() {
 
       {/* Footer Actions */}
       <div className="fixed bottom-0 left-0 w-full p-4 bg-app-bg/95 backdrop-blur-sm border-t border-slate-800 z-50 flex justify-center">
-        <div className="w-full max-w-md">
+        <div className="w-full max-w-md flex flex-col gap-2">
+          <button
+            onClick={copySummaryToClipboard}
+            className="w-full py-3 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl transition text-sm font-bold flex justify-center items-center gap-2 shadow-lg active:scale-95"
+          >
+            <MessageSquare size={18} /> COPIAR PARA WHATSAPP
+          </button>
+
           <button
             onClick={generatePDF}
-            className="w-full py-3 bg-slate-800 text-emerald-400 border border-emerald-500/30 hover:bg-emerald-500/10 rounded-xl transition text-sm font-bold flex justify-center items-center gap-2 shadow-lg"
+            className="w-full py-3 bg-slate-800 text-emerald-400 border border-emerald-500/30 hover:bg-emerald-500/10 rounded-xl transition text-sm font-bold flex justify-center items-center gap-2 shadow-lg active:scale-95"
           >
             <FileText size={18} /> DESCARGAR REPORTE PDF
           </button>
