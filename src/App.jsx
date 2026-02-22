@@ -526,7 +526,7 @@ function App() {
               </span>
             </div>
             <div className="flex-1 bg-slate-800/50 border border-slate-700/50 rounded-xl p-2 flex items-center justify-between">
-              <span className="text-[10px] font-bold text-slate-400 uppercase">Parallel</span>
+              <span className="text-[10px] font-bold text-slate-400 uppercase">Paralelo</span>
               <span className="text-sm font-mono font-bold text-amber-400">
                 {exchangeRates.loading ? '...' : exchangeRates.paralelo.toFixed(2)}
               </span>
