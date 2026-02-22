@@ -48,11 +48,33 @@ const getVenezuelaDateISO = (isoTimestamp) => {
 
 // Main Component
 function App() {
+  // 1. STATE DECLARATIONS (Must be first)
   const [payments, setPayments] = useState([]);
   const [agents, setAgents] = useState([]);
   const [loading, setLoading] = useState(true);
   const [isOnline, setIsOnline] = useState(navigator.onLine);
+  const [form, setForm] = useState({ agent: '', amount: '', reference: '', date: getVenezuelaDateISO() });
+  const [exchangeRates, setExchangeRates] = useState({ bcv: 0, paralelo: 0, loading: true, lastUpdate: null });
+  const [ratesForDate, setRatesForDate] = useState({ bcv: 0, paralelo: 0, isHistorical: false });
+  const [currencyMode, setCurrencyMode] = useState('Bs');
+  const [editingId, setEditingId] = useState(null);
+  const [error, setError] = useState('');
+  const [successMsg, setSuccessMsg] = useState('');
+  const [showHistory, setShowHistory] = useState(false);
+  const [showStats, setShowStats] = useState(false);
+  const [historySearch, setHistorySearch] = useState('');
+  const [summarySearch, setSummarySearch] = useState('');
+  const [globalFilterDate, setGlobalFilterDate] = useState(() => getVenezuelaDateISO());
 
+  // Date Range for Stats
+  const [statsStartDate, setStatsStartDate] = useState(() => {
+    const date = new Date();
+    date.setDate(date.getDate() - 7);
+    return getVenezuelaDateISO(date.toISOString());
+  });
+  const [statsEndDate, setStatsEndDate] = useState(() => getVenezuelaDateISO());
+
+  // 2. EFFECTS
   useEffect(() => {
     const handleOnline = () => setIsOnline(true);
     const handleOffline = () => setIsOnline(false);
@@ -64,49 +86,39 @@ function App() {
     };
   }, []);
 
-  // 1. Sync Payments from Firebase
+  // Sync Payments from Firebase
   useEffect(() => {
     const q = query(collection(db, 'payments'), orderBy('timestamp', 'desc'));
     const unsubscribe = onSnapshot(q, (snapshot) => {
-      const ps = snapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data()
-      }));
-      setPayments(ps);
+      setPayments(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
       setLoading(false);
     });
     return unsubscribe;
   }, []);
 
-  // 2. Sync Agents from Firebase
+  // Sync Agents from Firebase
   useEffect(() => {
-    const q = query(collection(db, 'agents'), orderBy('name', 'asc'));
-    const unsubscribe = onSnapshot(q, (snapshot) => {
+    const qAgents = query(collection(db, 'agents'), orderBy('name', 'asc'));
+    const unsubscribeAgents = onSnapshot(qAgents, (snapshot) => {
       const as = snapshot.docs.map(doc => doc.data().name);
       if (as.length > 0) {
         setAgents(as);
       } else {
-        // Fallback defaults if Firestore collection is empty
         setAgents([
-          'Agente 0',
-          'Agente 1(chiru, Finlay, tiam, 156 )',
-          'Agente 2 ( Madaly,Rous,Dasha, 108)',
-          'Agente 4',
-          'Agente 6',
-          'Agente 7',
-          'Agente 8',
-          'Agente 9',
-          'Agente 10',
+          'Agente Mari',
+          'Agente Josmer',
+          'Agente Isai',
+          'Teffy y Liam',
           'Liam',
           'Teffy y Ceci',
           'Agente Herlan'
         ]);
       }
     });
-    return unsubscribe;
-  }, [loading]);
+    return unsubscribeAgents;
+  }, []);
 
-  // 3. Fetch Exchange Rates
+  // Fetch Exchange Rates
   useEffect(() => {
     const fetchRates = async () => {
       try {
@@ -123,7 +135,6 @@ function App() {
         };
         setExchangeRates(rates);
 
-        // PERSIST: Save today's rate in Firestore if it doesn't exist
         const today = getVenezuelaDateISO();
         const rateDocRef = doc(db, 'daily_rates', today);
         const rateDoc = await getDoc(rateDocRef);
@@ -144,7 +155,7 @@ function App() {
     fetchRates();
   }, []);
 
-  // 4. Fetch Historical Rate for Global Filter Date
+  // Fetch Historical Rate for Global Filter Date
   useEffect(() => {
     const getHistoricalRate = async () => {
       try {
@@ -155,8 +166,6 @@ function App() {
           const data = rateDoc.data();
           setRatesForDate({ bcv: data.bcv, paralelo: data.paralelo, isHistorical: true });
         } else {
-          // If not found (old date or first run), default to current rates
-          // but mark as not historical (using latest available)
           setRatesForDate({
             bcv: exchangeRates.bcv,
             paralelo: exchangeRates.paralelo,
@@ -171,34 +180,6 @@ function App() {
       getHistoricalRate();
     }
   }, [globalFilterDate, exchangeRates.loading, exchangeRates.bcv]);
-
-  const [form, setForm] = useState({ agent: '', amount: '', reference: '', date: getVenezuelaDateISO() });
-  const [exchangeRates, setExchangeRates] = useState({ bcv: 0, paralelo: 0, loading: true, lastUpdate: null });
-  const [ratesForDate, setRatesForDate] = useState({ bcv: 0, paralelo: 0, isHistorical: false });
-  const [currencyMode, setCurrencyMode] = useState('Bs'); // 'Bs', 'BCV', 'Paralelo'
-  const [editingId, setEditingId] = useState(null);
-  const [error, setError] = useState('');
-  const [successMsg, setSuccessMsg] = useState('');
-  const [showHistory, setShowHistory] = useState(false);
-  const [showStats, setShowStats] = useState(false);
-
-  // Date Range for Stats
-  const [statsStartDate, setStatsStartDate] = useState(() => {
-    const date = new Date();
-    // Shift -7 days then get Vzla Date
-    date.setDate(date.getDate() - 7);
-    return getVenezuelaDateISO(date.toISOString());
-  });
-  const [statsEndDate, setStatsEndDate] = useState(() => {
-    return getVenezuelaDateISO();
-  });
-
-  // New States for Filtering
-  const [globalFilterDate, setGlobalFilterDate] = useState(() => {
-    return getVenezuelaDateISO();
-  });
-  const [historySearch, setHistorySearch] = useState('');
-  const [summarySearch, setSummarySearch] = useState('');
 
   // 1. First Layer: Filter ALL payments by DATE (Compared in Venezuela Time)
   const paymentsByDate = useMemo(() => {
@@ -639,8 +620,8 @@ _Enviado desde Control de Pagos PWA_`;
                 key={m}
                 onClick={() => setCurrencyMode(m)}
                 className={`flex-1 py-1.5 text-[10px] font-bold rounded-lg transition-all ${currencyMode === m
-                    ? 'bg-emerald-500 text-white shadow-lg'
-                    : 'text-slate-400 hover:text-slate-200'
+                  ? 'bg-emerald-500 text-white shadow-lg'
+                  : 'text-slate-400 hover:text-slate-200'
                   }`}
               >
                 {m}
