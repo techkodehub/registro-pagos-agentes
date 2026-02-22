@@ -3,7 +3,7 @@ import react from '@vitejs/plugin-react'
 import { VitePWA } from 'vite-plugin-pwa'
 
 export default defineConfig({
-  base: '/registro-pagos-agentes/',
+  base: './',
   plugins: [
     react(),
     VitePWA({
@@ -11,7 +11,7 @@ export default defineConfig({
       devOptions: {
         enabled: true
       },
-      includeAssets: ['favicon.ico', 'apple-touch-icon.png', 'masked-icon.svg'],
+      includeAssets: ['logo-tc.jpg'],
       manifest: {
         name: 'Control de Pagos',
         short_name: 'Pagos',
@@ -20,17 +20,24 @@ export default defineConfig({
         background_color: '#0f172a',
         display: 'standalone',
         orientation: 'portrait',
-        start_url: '/',
+        start_url: '.',
+        scope: './',
         icons: [
           {
-            src: 'pwa-192x192.png',
+            src: 'logo-tc.jpg',
             sizes: '192x192',
-            type: 'image/png'
+            type: 'image/jpeg'
           },
           {
-            src: 'pwa-512x512.png',
+            src: 'logo-tc.jpg',
             sizes: '512x512',
-            type: 'image/png'
+            type: 'image/jpeg'
+          },
+          {
+            src: 'logo-tc.jpg',
+            sizes: '512x512',
+            type: 'image/jpeg',
+            purpose: 'any maskable'
           }
         ]
       }
