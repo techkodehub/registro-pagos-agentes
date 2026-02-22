@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { PlusCircle, Trash2, Wallet, Users, History, Calendar, Filter, Cloud, CloudOff, Pencil, FileText, BarChart3, MessageSquare } from 'lucide-react';
 import { db } from './firebase';
-import { collection, addDoc, onSnapshot, deleteDoc, doc, query, orderBy, updateDoc } from 'firebase/firestore';
+import { collection, addDoc, onSnapshot, deleteDoc, doc, query, orderBy, updateDoc, getDoc, setDoc } from 'firebase/firestore';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { Chart as ChartJS, CategoryScale, LinearScale, BarElement, Title, Tooltip, Legend, ArcElement } from 'chart.js';
@@ -115,12 +115,27 @@ function App() {
         const bcvObj = data.find(r => r.fuente === 'oficial');
         const parallelObj = data.find(r => r.fuente === 'paralelo');
 
-        setExchangeRates({
+        const rates = {
           bcv: bcvObj?.promedio || 0,
           paralelo: parallelObj?.promedio || 0,
           loading: false,
           lastUpdate: bcvObj?.fechaActualizacion || null
-        });
+        };
+        setExchangeRates(rates);
+
+        // PERSIST: Save today's rate in Firestore if it doesn't exist
+        const today = getVenezuelaDateISO();
+        const rateDocRef = doc(db, 'daily_rates', today);
+        const rateDoc = await getDoc(rateDocRef);
+
+        if (!rateDoc.exists() && rates.bcv > 0) {
+          await setDoc(rateDocRef, {
+            bcv: rates.bcv,
+            paralelo: rates.paralelo,
+            lastUpdate: rates.lastUpdate,
+            savedAt: new Date().toISOString()
+          });
+        }
       } catch (err) {
         console.error('Error fetching rates:', err);
         setExchangeRates(prev => ({ ...prev, loading: false }));
@@ -129,8 +144,37 @@ function App() {
     fetchRates();
   }, []);
 
+  // 4. Fetch Historical Rate for Global Filter Date
+  useEffect(() => {
+    const getHistoricalRate = async () => {
+      try {
+        const rateDocRef = doc(db, 'daily_rates', globalFilterDate);
+        const rateDoc = await getDoc(rateDocRef);
+
+        if (rateDoc.exists()) {
+          const data = rateDoc.data();
+          setRatesForDate({ bcv: data.bcv, paralelo: data.paralelo, isHistorical: true });
+        } else {
+          // If not found (old date or first run), default to current rates
+          // but mark as not historical (using latest available)
+          setRatesForDate({
+            bcv: exchangeRates.bcv,
+            paralelo: exchangeRates.paralelo,
+            isHistorical: false
+          });
+        }
+      } catch (err) {
+        console.error("Error fetching historical rate:", err);
+      }
+    };
+    if (!exchangeRates.loading) {
+      getHistoricalRate();
+    }
+  }, [globalFilterDate, exchangeRates.loading, exchangeRates.bcv]);
+
   const [form, setForm] = useState({ agent: '', amount: '', reference: '', date: getVenezuelaDateISO() });
   const [exchangeRates, setExchangeRates] = useState({ bcv: 0, paralelo: 0, loading: true, lastUpdate: null });
+  const [ratesForDate, setRatesForDate] = useState({ bcv: 0, paralelo: 0, isHistorical: false });
   const [currencyMode, setCurrencyMode] = useState('Bs'); // 'Bs', 'BCV', 'Paralelo'
   const [editingId, setEditingId] = useState(null);
   const [error, setError] = useState('');
@@ -187,9 +231,12 @@ function App() {
 
   // Helper to convert value based on currency mode
   const convertedStats = useMemo(() => {
+    const rateBcv = ratesForDate.bcv || exchangeRates.bcv;
+    const rateParalelo = ratesForDate.paralelo || exchangeRates.paralelo;
+
     const convert = (val) => {
-      if (currencyMode === 'BCV' && exchangeRates.bcv > 0) return val / exchangeRates.bcv;
-      if (currencyMode === 'Paralelo' && exchangeRates.paralelo > 0) return val / exchangeRates.paralelo;
+      if (currencyMode === 'BCV' && rateBcv > 0) return val / rateBcv;
+      if (currencyMode === 'Paralelo' && rateParalelo > 0) return val / rateParalelo;
       return val;
     };
     return {
@@ -197,7 +244,7 @@ function App() {
       profit: convert(stats.profit),
       toUSDT: convert(stats.toUSDT)
     };
-  }, [stats, currencyMode, exchangeRates]);
+  }, [stats, currencyMode, ratesForDate, exchangeRates]);
 
   // 3. History View Filter
   const historyFilteredList = useMemo(() => {
@@ -477,25 +524,23 @@ function App() {
   };
 
   const copySummaryToClipboard = () => {
+    const rateBcv = ratesForDate.bcv || exchangeRates.bcv;
+    const rateParalelo = ratesForDate.paralelo || exchangeRates.paralelo;
+
     const text = `📊 *RESUMEN DE PAGOS - ${globalFilterDate}*
 ----------------------------------
-💰 *Total Recaudado (Bs):* ${formatByCurrency(stats.total, 'Bs')}
+💰 *Total Recaudado:* ${formatByCurrency(stats.total, 'Bs')}
 💎 *Honorarios (3%):* ${formatByCurrency(stats.profit, 'Bs')}
 🚀 *Pasar a USDT:* ${formatByCurrency(stats.toUSDT, 'Bs')}
 
-📈 *TASAS DEL DÍA*
-🏦 *BCV:* ${exchangeRates.bcv.toFixed(2)} Bs
-📉 *Paralelo:* ${exchangeRates.paralelo.toFixed(2)} Bs
+📈 *TASA USADA (${ratesForDate.isHistorical ? 'HISTÓRICA' : 'ACTUAL'})*
+🏦 *BCV:* ${rateBcv.toFixed(2)} Bs
+📉 *Paralelo:* ${rateParalelo.toFixed(2)} Bs
 ----------------------------------
-_Generado desde Control de Pagos PWA_`;
+_Enviado desde Control de Pagos PWA_`;
 
-    navigator.clipboard.writeText(text).then(() => {
-      setSuccessMsg("✅ Resumen copiado para WhatsApp");
-      setTimeout(() => setSuccessMsg(""), 3000);
-    }).catch(err => {
-      console.error('Error al copiar:', err);
-      setError('No se pudo copiar el resumen.');
-    });
+    const waUrl = `https://wa.me/?text=${encodeURIComponent(text)}`;
+    window.open(waUrl, '_blank');
   };
 
   return (
@@ -588,19 +633,27 @@ _Generado desde Control de Pagos PWA_`;
       {!showHistory && !showStats && (
         <div className="mb-6">
           {/* Currency Toggle */}
-          <div className="flex bg-slate-800/50 p-1 rounded-xl border border-slate-700/50 mb-3">
+          <div className="flex bg-slate-800/50 p-1 rounded-xl border border-slate-700/50 mb-1">
             {['Bs', 'BCV', 'Paralelo'].map((m) => (
               <button
                 key={m}
                 onClick={() => setCurrencyMode(m)}
                 className={`flex-1 py-1.5 text-[10px] font-bold rounded-lg transition-all ${currencyMode === m
-                  ? 'bg-emerald-500 text-white shadow-lg'
-                  : 'text-slate-400 hover:text-slate-200'
+                    ? 'bg-emerald-500 text-white shadow-lg'
+                    : 'text-slate-400 hover:text-slate-200'
                   }`}
               >
                 {m}
               </button>
             ))}
+          </div>
+          <div className="flex justify-between px-1 mb-3">
+            <span className="text-[9px] text-slate-500 italic">
+              {ratesForDate.isHistorical ? '📅 Usando tasa guardada de este día' : '⚡ Usando tasa actual (no hay histórica)'}
+            </span>
+            <span className="text-[9px] text-slate-400 font-mono">
+              BCV: {ratesForDate.bcv || exchangeRates.bcv} | P: {ratesForDate.paralelo || exchangeRates.paralelo}
+            </span>
           </div>
 
           <div className="grid grid-cols-2 gap-3">
@@ -944,7 +997,7 @@ _Generado desde Control de Pagos PWA_`;
             onClick={copySummaryToClipboard}
             className="w-full py-3 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl transition text-sm font-bold flex justify-center items-center gap-2 shadow-lg active:scale-95"
           >
-            <MessageSquare size={18} /> COPIAR PARA WHATSAPP
+            <MessageSquare size={18} /> ENVIAR POR WHATSAPP
           </button>
 
           <button
