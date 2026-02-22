@@ -112,9 +112,15 @@ function App() {
       try {
         const response = await fetch('https://ve.dolarapi.com/v1/dolares');
         const data = await response.json();
-        const bcvRate = data.find(r => r.fuente === 'oficial')?.promedio || 0;
-        const parallelRate = data.find(r => r.fuente === 'paralelo')?.promedio || 0;
-        setExchangeRates({ bcv: bcvRate, paralelo: parallelRate, loading: false });
+        const bcvObj = data.find(r => r.fuente === 'oficial');
+        const parallelObj = data.find(r => r.fuente === 'paralelo');
+
+        setExchangeRates({
+          bcv: bcvObj?.promedio || 0,
+          paralelo: parallelObj?.promedio || 0,
+          loading: false,
+          lastUpdate: bcvObj?.fechaActualizacion || null
+        });
       } catch (err) {
         console.error('Error fetching rates:', err);
         setExchangeRates(prev => ({ ...prev, loading: false }));
@@ -124,7 +130,7 @@ function App() {
   }, []);
 
   const [form, setForm] = useState({ agent: '', amount: '', reference: '', date: getVenezuelaDateISO() });
-  const [exchangeRates, setExchangeRates] = useState({ bcv: 0, paralelo: 0, loading: true });
+  const [exchangeRates, setExchangeRates] = useState({ bcv: 0, paralelo: 0, loading: true, lastUpdate: null });
   const [currencyMode, setCurrencyMode] = useState('Bs'); // 'Bs', 'BCV', 'Paralelo'
   const [editingId, setEditingId] = useState(null);
   const [error, setError] = useState('');
@@ -511,19 +517,26 @@ function App() {
         </div>
 
         {/* Exchange Rates Row */}
-        <div className="flex gap-2 mb-4">
-          <div className="flex-1 bg-slate-800/50 border border-slate-700/50 rounded-xl p-2 flex items-center justify-between">
-            <span className="text-[10px] font-bold text-slate-400 uppercase">BCV</span>
-            <span className="text-sm font-mono font-bold text-emerald-400">
-              {exchangeRates.loading ? '...' : exchangeRates.bcv.toFixed(2)}
-            </span>
+        <div className="flex flex-col gap-1 mb-4">
+          <div className="flex gap-2">
+            <div className="flex-1 bg-slate-800/50 border border-slate-700/50 rounded-xl p-2 flex items-center justify-between">
+              <span className="text-[10px] font-bold text-slate-400 uppercase">BCV</span>
+              <span className="text-sm font-mono font-bold text-emerald-400">
+                {exchangeRates.loading ? '...' : exchangeRates.bcv.toFixed(2)}
+              </span>
+            </div>
+            <div className="flex-1 bg-slate-800/50 border border-slate-700/50 rounded-xl p-2 flex items-center justify-between">
+              <span className="text-[10px] font-bold text-slate-400 uppercase">Parallel</span>
+              <span className="text-sm font-mono font-bold text-amber-400">
+                {exchangeRates.loading ? '...' : exchangeRates.paralelo.toFixed(2)}
+              </span>
+            </div>
           </div>
-          <div className="flex-1 bg-slate-800/50 border border-slate-700/50 rounded-xl p-2 flex items-center justify-between">
-            <span className="text-[10px] font-bold text-slate-400 uppercase">Parallel</span>
-            <span className="text-sm font-mono font-bold text-amber-400">
-              {exchangeRates.loading ? '...' : exchangeRates.paralelo.toFixed(2)}
-            </span>
-          </div>
+          {!exchangeRates.loading && exchangeRates.lastUpdate && (
+            <div className="text-[8px] text-slate-500 text-right px-1 italic">
+              Actualizado: {new Date(exchangeRates.lastUpdate).toLocaleString('es-VE', { timeZone: 'America/Caracas' })}
+            </div>
+          )}
         </div>
 
         {/* Global Date Filter */}
@@ -559,8 +572,8 @@ function App() {
                 key={m}
                 onClick={() => setCurrencyMode(m)}
                 className={`flex-1 py-1.5 text-[10px] font-bold rounded-lg transition-all ${currencyMode === m
-                    ? 'bg-emerald-500 text-white shadow-lg'
-                    : 'text-slate-400 hover:text-slate-200'
+                  ? 'bg-emerald-500 text-white shadow-lg'
+                  : 'text-slate-400 hover:text-slate-200'
                   }`}
               >
                 {m}
