@@ -400,19 +400,23 @@ function App() {
     try {
       if (editingId) {
         // UPDATE Existing Payment
+        const dateObj = new Date(); // Current local time
+        const [y, m, d] = form.date.split('-').map(Number);
+        dateObj.setFullYear(y, m - 1, d); // Update date part, keep local time
         await updateDoc(doc(db, 'payments', editingId), {
           agent: form.agent,
           amount: parseFloat(form.amount),
           reference: form.reference,
-          timestamp: new Date(`${form.date}T${new Date().toISOString().split('T')[1]}`).toISOString()
+          timestamp: dateObj.toISOString()
         });
         setSuccessMsg(`Pago actualizado correctamente.`);
         setEditingId(null);
       } else {
         // CREATE New Payment
-        // Combine selected date with current time to maintain chronological order
-        const currentTime = new Date().toISOString().split('T')[1];
-        const finalTimestamp = new Date(`${form.date}T${currentTime}`).toISOString();
+        const dateObj = new Date(); // Current local time
+        const [y, m, d] = form.date.split('-').map(Number);
+        dateObj.setFullYear(y, m - 1, d); // Update date part, keep local time
+        const finalTimestamp = dateObj.toISOString();
 
         await addDoc(collection(db, 'payments'), {
           agent: form.agent,
